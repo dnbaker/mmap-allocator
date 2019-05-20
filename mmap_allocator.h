@@ -4,6 +4,9 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <map>
+#include <unordered_map>
+#include <set>
 #include <cmath>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -16,8 +19,8 @@ namespace mm {
 const int kPageSize = sysconf(_SC_PAGE_SIZE);
 
 namespace {
-void* default_allocator;
-};
+static void* default_allocator = nullptr;
+}
 
 template <typename T>
 class Allocator {
@@ -41,7 +44,7 @@ class Allocator {
     typedef Allocator<U> other;
   };
 
-  static Allocator* New(std::string filename) {
+  static Allocator *New(std::string filename) {
     int fd = open(filename.c_str(), O_RDWR | O_CREAT | O_TRUNC, (mode_t)0777);
     if (fd == -1) {
       return NULL;
@@ -61,6 +64,11 @@ class Allocator {
       : fd_(other.fd_),
         sizes_(other.sizes_),
         free_blocks_(other.free_blocks_) {}
+  Allocator(Allocator &o): fd_(o.fd_), sizes_(nullptr), free_blocks_(nullptr) {
+    free_blocks_.swap(o.free_blocks_);
+    sizes_.swap(o.sizes_);
+    o.fd_ = -1;
+  }
 
   T* allocate(size_t n) {
     // round up to multiple of page size
@@ -132,12 +140,13 @@ inline bool operator!=(const Allocator<T>& a, const Allocator<U>& b) {
   return !(a == b);
 }
 
-void SetDefault(std::string filename) {
-  default_allocator = static_cast<void*>(Allocator<char>::New(filename));
-}
-
 void FreeDefault() {
   delete static_cast<Allocator<char>*>(default_allocator);
+}
+
+void SetDefault(std::string filename) {
+  if(default_allocator) FreeDefault();
+  default_allocator = static_cast<void*>(Allocator<char>::New(filename));
 }
 
 // Convenience typedefs of STL types
